@@ -85,7 +85,7 @@ class ESIdentityCardNumberField(RegexField):
         self.nif_control = 'TRWAGMYFPDXBNJZSQVHLCKE'
         self.cif_control = 'JABCDEFGHI'
         self.cif_types = 'ABCDEFGHJKLMNPQS'
-        self.nie_types = 'XT'
+        self.nie_types = 'XYZ'
         id_card_re = re.compile(r'^([%s]?)[ -]?(\d+)[ -]?([%s]?)$' % (self.cif_types + self.nie_types, self.nif_control + self.cif_control), re.IGNORECASE)
         super(ESIdentityCardNumberField, self).__init__(
             id_card_re, max_length, min_length,
@@ -109,7 +109,9 @@ class ESIdentityCardNumberField(RegexField):
                 raise ValidationError(self.error_messages['invalid_nif'])
         elif letter1 in self.nie_types and letter2:
             # NIE
-            if letter2 == nif_get_checksum(number):
+            l2n = letter1.replace('X', '0').replace('Y', '1').replace('Z', '2')
+            number2b_checked = l2n + number
+            if letter2 == nif_get_checksum(number2b_checked):
                 return value
             else:
                 raise ValidationError(self.error_messages['invalid_nie'])
