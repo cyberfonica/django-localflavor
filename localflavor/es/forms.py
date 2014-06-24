@@ -9,7 +9,7 @@ import re
 
 from django.core.validators import EMPTY_VALUES
 from django.forms import ValidationError
-from django.forms.fields import RegexField, Select
+from django.forms.fields import RegexField, Select, CharField
 from django.utils.translation import ugettext_lazy as _
 
 from .es_provinces import PROVINCE_CHOICES
@@ -53,7 +53,7 @@ class ESPhoneNumberField(RegexField):
                                                  max_length, min_length, *args, **kwargs)
 
 
-class ESIdentityCardNumberField(RegexField):
+class ESIdentityCardNumberField(CharField):
     """
     Spanish NIF/NIE/CIF (Fiscal Identification Number) code.
 
@@ -86,10 +86,8 @@ class ESIdentityCardNumberField(RegexField):
         self.cif_control = 'JABCDEFGHI'
         self.cif_types = 'ABCDEFGHJKLMNPQS'
         self.nie_types = 'XYZ'
-        id_card_re = re.compile(r'^([%s]?)[ -]?(\d+)[ -]?([%s]?)$' % (self.cif_types + self.nie_types, self.nif_control + self.cif_control), re.IGNORECASE)
         super(ESIdentityCardNumberField, self).__init__(
-            id_card_re, max_length, min_length,
-            error_message=self.default_error_messages['invalid%s' % (self.only_nif and '_only_nif' or '')], *args, **kwargs)
+            max_length, min_length, *args, **kwargs)
 
     def clean(self, value):
         super(ESIdentityCardNumberField, self).clean(value)
@@ -98,7 +96,11 @@ class ESIdentityCardNumberField(RegexField):
         nif_get_checksum = lambda d: self.nif_control[int(d) % 23]
 
         value = value.upper().replace(' ', '').replace('-', '')
-        m = re.match(r'^([%s]?)[ -]?(\d+)[ -]?([%s]?)$' % (self.cif_types + self.nie_types, self.nif_control + self.cif_control), value)
+        m = re.match(r'^([%s]?)(\d+)([%s]?)$' % (self.cif_types + self.nie_types, self.nif_control + self.cif_control), value)
+
+        if m is None:
+            raise ValidationError(self.error_messages['invalid'])
+
         letter1, number, letter2 = m.groups()
 
         if not letter1 and letter2:
