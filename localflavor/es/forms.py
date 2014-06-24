@@ -14,6 +14,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from .es_provinces import PROVINCE_CHOICES
 from .es_regions import REGION_CHOICES
+from .validators import ESIdentityCardNumberValidator
 
 
 class ESPostalCodeField(RegexField):
@@ -80,6 +81,8 @@ class ESIdentityCardNumberField(CharField):
         'invalid_cif': _('Invalid checksum for CIF.'),
     }
 
+    # validators = [ESIdentityCardNumberValidator()]
+    # default_validators =
     def __init__(self, only_nif=False, max_length=None, min_length=None, *args, **kwargs):
         self.only_nif = only_nif
         self.nif_control = 'TRWAGMYFPDXBNJZSQVHLCKE'
@@ -87,47 +90,12 @@ class ESIdentityCardNumberField(CharField):
         self.cif_types = 'ABCDEFGHJKLMNPQS'
         self.nie_types = 'XYZ'
         super(ESIdentityCardNumberField, self).__init__(
-            max_length, min_length, *args, **kwargs)
+            max_length, min_length, validators=[ESIdentityCardNumberValidator()], *args, **kwargs)
 
     def clean(self, value):
-        super(ESIdentityCardNumberField, self).clean(value)
-        if value in EMPTY_VALUES:
-            return ''
-        nif_get_checksum = lambda d: self.nif_control[int(d) % 23]
-
-        value = value.upper().replace(' ', '').replace('-', '')
-        m = re.match(r'^([%s]?)(\d+)([%s]?)$' % (self.cif_types + self.nie_types, self.nif_control + self.cif_control), value)
-
-        if m is None:
-            raise ValidationError(self.error_messages['invalid'])
-
-        letter1, number, letter2 = m.groups()
-
-        if not letter1 and letter2:
-            # NIF
-            if letter2 == nif_get_checksum(number):
-                return value
-            else:
-                raise ValidationError(self.error_messages['invalid_nif'])
-        elif letter1 in self.nie_types and letter2:
-            # NIE
-            l2n = letter1.replace('X', '0').replace('Y', '1').replace('Z', '2')
-            number2b_checked = l2n + number
-            if letter2 == nif_get_checksum(number2b_checked):
-                return value
-            else:
-                raise ValidationError(self.error_messages['invalid_nie'])
-        elif not self.only_nif and letter1 in self.cif_types and len(number) in [7, 8]:
-            # CIF
-            if not letter2:
-                number, letter2 = number[:-1], int(number[-1])
-            checksum = cif_get_checksum(number)
-            if letter2 in (checksum, self.cif_control[checksum]):
-                return value
-            else:
-                raise ValidationError(self.error_messages['invalid_cif'])
-        else:
-            raise ValidationError(self.error_messages['invalid'])
+        if value not in EMPTY_VALUES:
+            value = value.upper().replace(' ', '').replace('-', '')
+        return super(ESIdentityCardNumberField, self).clean(value)
 
 
 class ESCCCField(RegexField):
@@ -190,10 +158,3 @@ class ESProvinceSelect(Select):
     """
     def __init__(self, attrs=None):
         super(ESProvinceSelect, self).__init__(attrs, choices=PROVINCE_CHOICES)
-
-
-def cif_get_checksum(number):
-    s1 = sum([int(digit) for pos, digit in enumerate(number) if int(pos) % 2])
-    s2 = sum([sum([int(unit) for unit in str(int(digit) * 2)])
-             for pos, digit in enumerate(number) if not int(pos) % 2])
-    return (10 - ((s1 + s2) % 10)) % 10
